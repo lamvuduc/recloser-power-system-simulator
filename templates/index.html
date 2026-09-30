@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Automatic Recloser Simulator</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="eyebrow">POWER SYSTEM PROTECTION • EDUCATIONAL SIMULATOR</div>
+    <h1>Automatic Recloser Simulator</h1>
+    <p>Mô phỏng phát hiện sự cố → cắt CB → kiểm tra điều kiện → tự đóng lại hoặc chuyển quyền cho điều hành viên.</p>
+  </div>
+  <div class="status-pill" id="globalStatus"><span></span> READY</div>
+</header>
+
+<main class="container">
+<section class="card diagram-card">
+  <div class="section-head">
+    <div><h2>Sơ đồ hệ thống 110 kV</h2><p>Trạng thái được cập nhật trong quá trình mô phỏng.</p></div>
+    <div class="scenario" id="scenarioBadge">NORMAL</div>
+  </div>
+  <div class="power-diagram">
+    <div class="node source-node"><div class="node-icon">⚡</div><strong>GRID / BUS</strong><small id="busLabel">110 kV • 50 Hz</small></div>
+    <div class="line-wrap"><div class="wire" id="wire1"><span class="flow"></span></div><small>Source side</small></div>
+    <div class="recloser-box" id="recloserBox">
+      <div class="cb-symbol"><span class="cb-line"></span><span class="cb-blade" id="cbBlade"></span><span class="cb-line"></span></div>
+      <strong>RECLOSER / CB</strong><small id="cbText">CLOSED</small>
+    </div>
+    <div class="line-wrap"><div class="wire" id="wire2"><span class="flow"></span></div><small>Protected line</small></div>
+    <div class="fault-zone" id="faultZone"><div class="fault-symbol">🏭</div><strong id="faultText">LOAD</strong><small id="faultSub">Energized</small></div>
+  </div>
+  <div class="diagram-legend">
+    <span><i class="dot blue"></i> Energized</span><span><i class="dot red"></i> Fault</span><span><i class="dot gray"></i> Isolated / de-energized</span>
+  </div>
+</section>
+
+<section class="grid">
+<div class="card">
+  <div class="section-head"><div><h2>Thông số hệ thống & sự cố</h2><p>Các giá trị bên dưới là tham số của kịch bản mô phỏng.</p></div></div>
+  <div class="form-grid">
+    <label>Điện áp định mức<input id="nominal_v" type="number" value="110" step="1"><span>kV</span></label>
+    <label>Dòng sự cố<input id="fault_current" type="number" value="2.5" step="0.1"><span>kA</span></label>
+    <label>Ngưỡng pickup<input id="pickup" type="number" value="2.0" step="0.1"><span>kA</span></label>
+    <label>Thời gian sự cố<input id="fault_duration" type="number" value="0.35" step="0.05"><span>s</span></label>
+    <label>Dead time<input id="dead_time" type="number" value="2" step="0.5"><span>s</span></label>
+    <label>Số lần đóng lại tối đa<input id="max_reclose" type="number" value="2" min="1" max="5"><span>lần</span></label>
+  </div>
+  <div class="subhead">Điều kiện kiểm tra trước khi đóng</div>
+  <div class="form-grid">
+    <label>Điện áp phía nguồn<input id="bus_v" type="number" value="110" step="1"><span>kV</span></label>
+    <label>Điện áp phía đường dây<input id="line_v" type="number" value="109" step="1"><span>kV</span></label>
+    <label>Ngưỡng điện áp tối thiểu<input id="min_bus_v_pu" type="number" value="0.90" step="0.01"><span>pu</span></label>
+    <label>ΔV tối đa<input id="max_delta_v_pu" type="number" value="0.10" step="0.01"><span>pu</span></label>
+    <label>Tần số phía nguồn<input id="bus_f" type="number" value="50" step="0.01"><span>Hz</span></label>
+    <label>Tần số phía đường dây<input id="line_f" type="number" value="50" step="0.01"><span>Hz</span></label>
+    <label>Δf tối đa<input id="max_delta_f" type="number" value="0.20" step="0.01"><span>Hz</span></label>
+    <label>Góc lệch pha<input id="phase_angle" type="number" value="5" step="1"><span>°</span></label>
+    <label>Góc tối đa cho phép<input id="max_phase" type="number" value="10" step="1"><span>°</span></label>
+    <label class="select-label">Sau khi cắt<select id="fault_clears"><option value="yes">Sự cố được loại bỏ</option><option value="no">Sự cố vẫn tồn tại</option></select></label>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="runBtn">▶ CHẠY MÔ PHỎNG</button>
+    <button class="btn secondary" id="faultBtn">⚠ KỊCH BẢN SỰ CỐ</button>
+    <button class="btn ghost" id="resetBtn">↻ RESET</button>
+  </div>
+</div>
+
+<div class="card decision-card">
+  <div class="section-head"><div><h2>Decision logic</h2><p>Điều kiện trước khi cấp phép đóng CB.</p></div></div>
+  <div class="checks">
+    <div class="check" id="checkOver"><span>01</span><div><b>Overcurrent</b><small>I fault &gt; pickup</small></div><i>—</i></div>
+    <div class="check" id="checkBus"><span>02</span><div><b>Bus voltage</b><small>Điện áp phía nguồn ≥ giới hạn</small></div><i>—</i></div>
+    <div class="check" id="checkLine"><span>03</span><div><b>Line voltage</b><small>Điện áp phía đường dây ≥ giới hạn</small></div><i>—</i></div>
+    <div class="check" id="checkDV"><span>04</span><div><b>Voltage difference ΔV</b><small>Chênh lệch điện áp trong giới hạn</small></div><i>—</i></div>
+    <div class="check" id="checkDF"><span>05</span><div><b>Frequency difference Δf</b><small>Chênh lệch tần số trong giới hạn</small></div><i>—</i></div>
+    <div class="check" id="checkPhase"><span>06</span><div><b>Synchronism / phase angle</b><small>Góc lệch pha trong giới hạn</small></div><i>—</i></div>
+    <div class="check" id="checkCount"><span>07</span><div><b>Reclose counter</b><small>Chưa vượt số lần cho phép</small></div><i>—</i></div>
+  </div>
+  <div class="decision-result" id="decisionResult">WAITING FOR SIMULATION</div>
+</div>
+</section>
+
+<section class="grid bottom-grid">
+<div class="card">
+  <div class="section-head"><div><h2>Real-time status</h2></div></div>
+  <div class="metric-grid">
+    <div><span>BUS VOLTAGE</span><strong id="mBus">110 kV</strong></div>
+    <div><span>LINE VOLTAGE</span><strong id="mLine">109 kV</strong></div>
+    <div><span>ΔV</span><strong id="mDV">0.9 %</strong></div>
+    <div><span>Δf</span><strong id="mDF">0.00 Hz</strong></div>
+    <div><span>PHASE ANGLE</span><strong id="mPhase">5°</strong></div>
+    <div><span>RECL. COUNT</span><strong id="mCount">0 / 2</strong></div>
+  </div>
+</div>
+<div class="card log-card">
+  <div class="section-head"><div><h2>Event log</h2></div><div class="live"><span></span> LIVE</div></div>
+  <div class="event-log" id="eventLog"><div class="empty">Chưa có sự kiện. Nhấn “CHẠY MÔ PHỎNG”.</div></div>
+</div>
+</section>
+
+<section class="card explain">
+  <h2>Nguyên lý mô phỏng</h2>
+  <div class="flowline">
+    <div>FAULT</div><b>→</b><div>TRIP</div><b>→</b><div>ISOLATE</div><b>→</b><div>DEAD TIME</div><b>→</b><div>CHECK ΔV / Δf / Δφ</div><b>→</b><div>AUTO RECLOSE<br><small>hoặc OPERATOR</small></div>
+  </div>
+</section>
+</main>
+<footer>Educational simulation only • Không dùng để điều khiển thiết bị điện thực tế.</footer>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
